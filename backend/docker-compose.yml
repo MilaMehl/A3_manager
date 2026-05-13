@@ -1,0 +1,37 @@
+services:
+  api:
+    build: .
+    container_name: propedido-api
+    ports:
+      - "${PORT:-5000}:5000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite:////app/instance/app.db
+      - FLASK_ENV=production
+    volumes:
+      # Persiste imagens fora do container
+      - images_data:/app/app/static/public/images
+    restart: unless-stopped
+
+  api-dev:
+    build: .
+    container_name: propedido-api-dev
+    ports:
+      - "${PORT:-5000}:5000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite:////app/instance/app.db
+      - FLASK_ENV=development
+    volumes:
+      # Monta o código local para hot-reload (exceto instance e migrations, que vêm do build)
+      - ./app:/app/app
+      - ./run.py:/app/run.py
+      - ./tests:/app/tests
+      # Persiste imagens fora do container
+      - images_data:/app/app/static/public/images
+    restart: unless-stopped
+
+volumes:
+  images_data:

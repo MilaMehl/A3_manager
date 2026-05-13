@@ -1,288 +1,320 @@
 "use client";
-
-import { useEffect, useState, FormEvent } from "react";
-import Layout from "../../components/Layout";
-import Modal from "../../components/Modal";
-import { getRequests, createRequest } from "../../services/requests";
-
-interface RequestItem {
-  id: number;
-  address: string;
-  classification: string;
-  date: string;
-  status: string;
-  photo_url?: string;
-}
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Solicitacoes() {
-  const [requests, setRequests] = useState<RequestItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [limit, setLimit] = useState(10);
-  const [page, setPage] = useState(1);
-  const [selectedRequest, setSelectedRequest] = useState<RequestItem | null>(
-    null,
+  const [viewMode, setViewMode] = useState<"individuais" | "agrupamentos">(
+    "individuais",
   );
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newAddress, setNewAddress] = useState("");
-  const [newClassification, setNewClassification] = useState("");
+  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [agrupamentos, setAgrupamentos] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [busca, setBusca] = useState("");
+  const [erro, setErro] = useState("");
 
-  const fetchRequests = async () => {
-    setLoading(true);
+  // Controle de qual grupo está "aberto" na sanfona
+  const [grupoExpandido, setGrupoExpandido] = useState<number | null>(null);
+
+  const router = useRouter();
+
+  const carregarDados = async (filtroEndereco = "") => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      router.push("/");
+      return;
+    }
+
     try {
-      const res = await getRequests({ search: searchTerm, limit, page });
-      setRequests(res.data || []);
+      // Decide qual API chamar com base na aba selecionada
+      const endpoint =
+        viewMode === "individuais" ? "/api/requests/" : "/api/groupings/";
+
+      const url = filtroEndereco
+        ? `http://localhost:5000${endpoint}?address=${filtroEndereco}`
+        : `http://localhost:5000${endpoint}`;
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        if (viewMode === "individuais") {
+          setPedidos(data.data);
+        } else {
+          setAgrupamentos(data.data);
+        }
+        setTotal(data.total);
+        setErro(""); // Limpa erros antigos
+      } else {
+        setErro("Erro na API: " + (data.error || "Falha desconhecida"));
+      }
     } catch (error) {
-      setRequests([]);
-    } finally {
-      setLoading(false);
+      setErro("Erro de conexão com o servidor Python.");
     }
   };
 
+  // Recarrega os dados toda vez que a aba (viewMode) mudar
   useEffect(() => {
-    fetchRequests();
-  }, [searchTerm, limit, page]);
-
-  const handleCreate = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await createRequest({
-        address: newAddress,
-        classification: newClassification,
-      });
-      setIsCreateModalOpen(false);
-      setNewAddress("");
-      setNewClassification("");
-      fetchRequests();
-    } catch (error) {
-      alert("Erro ao registrar solicitação");
-    }
-  };
-
-  const formatDate = (isoString: string) => {
-    try {
-      const date = new Date(isoString);
-      return date.toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return isoString;
-    }
-  };
+    carregarDados(busca);
+    setGrupoExpandido(null); // Fecha a sanfona ao trocar de aba
+  }, [viewMode]);
 
   return (
-    <Layout>
-      <div className="rounded-lg bg-white p-8 shadow-sm">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-800">
-            Solicitações Registradas
-          </h2>
+    <div
+      style={{
+        padding: "2rem",
+        backgroundColor: "#f8f9fa",
+        minHeight: "100vh",
+        color: "#333",
+        width: "100%",
+      }}
+    >
+      <div style={{ maxWidth: "800px", margin: "0 auto" }}>
+        {/* Cabeçalho */}
+        <header
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "1.5rem",
+          }}
+        >
+          <h1>📋 Solicitações ({total})</h1>
           <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="rounded-md bg-[#00a2ff] px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-600 shadow-sm"
+            onClick={() => router.push("/dashboard")}
+            style={{
+              padding: "0.5rem 1rem",
+              backgroundColor: "#6c757d",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
           >
-            Nova Solicitação
+            ⬅ Voltar ao Menu
+          </button>
+        </header>
+
+        {/* Abas (Toggle) */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "1.5rem" }}>
+          <button
+            onClick={() => setViewMode("individuais")}
+            style={{
+              flex: 1,
+              padding: "0.75rem",
+              borderRadius: "4px",
+              fontWeight: "bold",
+              border: "1px solid #0070f3",
+              cursor: "pointer",
+              backgroundColor: viewMode === "individuais" ? "#0070f3" : "white",
+              color: viewMode === "individuais" ? "white" : "#0070f3",
+              transition: "0.2s",
+            }}
+          >
+            Visão Individual
+          </button>
+          <button
+            onClick={() => setViewMode("agrupamentos")}
+            style={{
+              flex: 1,
+              padding: "0.75rem",
+              borderRadius: "4px",
+              fontWeight: "bold",
+              border: "1px solid #28a745",
+              cursor: "pointer",
+              backgroundColor:
+                viewMode === "agrupamentos" ? "#28a745" : "white",
+              color: viewMode === "agrupamentos" ? "white" : "#28a745",
+              transition: "0.2s",
+            }}
+          >
+            Visão em Agrupamentos
           </button>
         </div>
 
-        <div className="mb-4 flex items-center justify-between text-sm text-gray-500">
-          <div className="flex items-center space-x-2">
-            <span>Show</span>
-            <select
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              className="rounded-md border border-gray-300 p-1 outline-none focus:border-[#00a2ff] focus:ring-1 focus:ring-[#00a2ff]"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </select>
-            <span>entries</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span>Search:</span>
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="rounded-md border border-gray-300 p-1 outline-none focus:border-[#00a2ff] focus:ring-1 focus:ring-[#00a2ff]"
-            />
-          </div>
+        {/* Barra de Busca */}
+        <div style={{ marginBottom: "2rem", display: "flex", gap: "10px" }}>
+          <input
+            type="text"
+            placeholder="Filtrar por endereço..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            style={{
+              flex: 1,
+              padding: "0.75rem",
+              borderRadius: "4px",
+              border: "1px solid #ccc",
+              color: "black",
+            }}
+          />
+          <button
+            onClick={() => carregarDados(busca)}
+            style={{
+              padding: "0.75rem 1.5rem",
+              backgroundColor: "#343a40",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontWeight: "bold",
+            }}
+          >
+            Buscar
+          </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-gray-600">
-            <thead className="border-b border-t border-gray-200 bg-[#f8f9fc]">
-              <tr>
-                <th className="px-4 py-3 font-semibold text-gray-500">
-                  Endereço
-                </th>
-                <th className="px-4 py-3 font-semibold text-gray-500">
-                  Classificação
-                </th>
-                <th className="px-4 py-3 font-semibold text-gray-500">Data</th>
-                <th className="px-4 py-3 font-semibold text-gray-500">
-                  Status
-                </th>
-                <th className="px-4 py-3 font-semibold text-gray-500 text-center">
-                  Ação
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-gray-500">
-                    Buscando dados...
-                  </td>
-                </tr>
-              ) : requests.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-gray-500">
-                    Nenhuma solicitação encontrada.
-                  </td>
-                </tr>
-              ) : (
-                requests.map((req) => (
-                  <tr
-                    key={req.id}
-                    className="border-b border-gray-100 bg-white hover:bg-gray-50"
+        {erro && <p style={{ color: "red", fontWeight: "bold" }}>{erro}</p>}
+
+        {/* Lista de Dados (Renderização Condicional) */}
+        <div style={{ display: "grid", gap: "1rem" }}>
+          {/* MODO INDIVIDUAL */}
+          {viewMode === "individuais" &&
+            (pedidos.length === 0 ? (
+              <p style={{ textAlign: "center", color: "#666" }}>
+                Nenhum registro encontrado.
+              </p>
+            ) : (
+              pedidos.map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    backgroundColor: "white",
+                    padding: "1.5rem",
+                    borderRadius: "8px",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+                    borderLeft: "5px solid #0070f3",
+                  }}
+                >
+                  <div
+                    style={{ display: "flex", justifyContent: "space-between" }}
                   >
-                    <td className="px-4 py-4">{req.address}</td>
-                    <td className="px-4 py-4">{req.classification}</td>
-                    <td className="px-4 py-4">{formatDate(req.date)}</td>
-                    <td className="px-4 py-4">
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                          req.status === "concluído"
-                            ? "bg-green-100 text-green-700"
-                            : req.status === "em andamento"
-                              ? "bg-blue-100 text-blue-700"
-                              : "bg-yellow-100 text-yellow-700"
-                        }`}
+                    <span style={{ fontSize: "12px", color: "#888" }}>
+                      ID: #{p.id}
+                    </span>
+                    <span
+                      style={{
+                        backgroundColor: "#e1f0ff",
+                        color: "#0070f3",
+                        padding: "2px 8px",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {p.status}
+                    </span>
+                  </div>
+                  <h3 style={{ margin: "0.5rem 0" }}>{p.classification}</h3>
+                  <p style={{ margin: 0, color: "#555" }}>📍 {p.address}</p>
+                </div>
+              ))
+            ))}
+
+          {/* MODO AGRUPAMENTOS */}
+          {viewMode === "agrupamentos" &&
+            (agrupamentos.length === 0 ? (
+              <p style={{ textAlign: "center", color: "#666" }}>
+                Nenhum agrupamento encontrado.
+              </p>
+            ) : (
+              agrupamentos.map((grupo) => (
+                <div
+                  key={grupo.id}
+                  style={{
+                    backgroundColor: "white",
+                    borderRadius: "8px",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+                    borderLeft: "5px solid #28a745",
+                    overflow: "hidden",
+                  }}
+                >
+                  {/* Cabeçalho do Grupo (Clicável) */}
+                  <div
+                    onClick={() =>
+                      setGrupoExpandido(
+                        grupoExpandido === grupo.id ? null : grupo.id,
+                      )
+                    }
+                    style={{
+                      padding: "1.5rem",
+                      cursor: "pointer",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      backgroundColor:
+                        grupoExpandido === grupo.id ? "#f1f8f3" : "white",
+                    }}
+                  >
+                    <div>
+                      <h3 style={{ margin: "0 0 0.5rem 0", color: "#28a745" }}>
+                        Agrupamento #{grupo.id}
+                      </h3>
+                      <p style={{ margin: 0, color: "#555", fontSize: "14px" }}>
+                        <strong>{grupo.total_requests}</strong> solicitações •
+                        Classificação: {grupo.classification}
+                      </p>
+                    </div>
+                    <span style={{ fontSize: "20px" }}>
+                      {grupoExpandido === grupo.id ? "🔼" : "🔽"}
+                    </span>
+                  </div>
+
+                  {/* Miolo da Sanfona (As solicitações dentro do grupo) */}
+                  {grupoExpandido === grupo.id && (
+                    <div
+                      style={{
+                        padding: "1.5rem",
+                        backgroundColor: "#fafafa",
+                        borderTop: "1px solid #eee",
+                      }}
+                    >
+                      <h4
+                        style={{
+                          margin: "0 0 1rem 0",
+                          fontSize: "14px",
+                          color: "#666",
+                        }}
                       >
-                        {req.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      <button
-                        onClick={() => setSelectedRequest(req)}
-                        className="rounded-full bg-[#6c757d] px-4 py-1.5 text-xs font-semibold text-white hover:bg-gray-700"
+                        Pedidos neste grupo:
+                      </h4>
+                      <ul
+                        style={{
+                          listStyle: "none",
+                          padding: 0,
+                          margin: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "10px",
+                        }}
                       >
-                        Visualizar
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                        {grupo.requests.map((req: any) => (
+                          <li
+                            key={req.id}
+                            style={{
+                              padding: "10px",
+                              backgroundColor: "white",
+                              border: "1px solid #ddd",
+                              borderRadius: "4px",
+                              fontSize: "14px",
+                            }}
+                          >
+                            <strong>ID #{req.id}</strong> - {req.address} <br />
+                            <span style={{ color: "#888", fontSize: "12px" }}>
+                              Status: {req.status}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))
+            ))}
         </div>
-
-        <div className="mt-6 flex items-center justify-end space-x-2 text-sm">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            className="px-3 py-1 text-gray-400 hover:text-gray-800 transition-colors disabled:opacity-50"
-            disabled={page === 1}
-          >
-            Previous
-          </button>
-          <button className="rounded bg-gray-200 px-3 py-1 font-semibold text-gray-700">
-            {page}
-          </button>
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            className="px-3 py-1 text-gray-400 hover:text-gray-800 transition-colors"
-          >
-            Next
-          </button>
-        </div>
-
-        <Modal
-          isOpen={!!selectedRequest}
-          onClose={() => setSelectedRequest(null)}
-          title="Detalhes da Solicitação"
-        >
-          {selectedRequest && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="block font-bold text-gray-500 uppercase text-[10px]">
-                    Endereço
-                  </span>
-                  <p className="text-gray-800">{selectedRequest.address}</p>
-                </div>
-                <div>
-                  <span className="block font-bold text-gray-500 uppercase text-[10px]">
-                    Status
-                  </span>
-                  <p className="text-gray-800 capitalize">
-                    {selectedRequest.status}
-                  </p>
-                </div>
-              </div>
-              {selectedRequest.photo_url && (
-                <div>
-                  <span className="block font-bold text-gray-500 uppercase text-[10px] mb-2">
-                    Evidência
-                  </span>
-                  <img
-                    src={selectedRequest.photo_url}
-                    alt="Ocorrência"
-                    className="w-full rounded-lg border border-gray-200"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </Modal>
-
-        <Modal
-          isOpen={isCreateModalOpen}
-          onClose={() => setIsCreateModalOpen(false)}
-          title="Registrar Solicitação"
-        >
-          <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Endereço Completo
-              </label>
-              <input
-                type="text"
-                value={newAddress}
-                onChange={(e) => setNewAddress(e.target.value)}
-                className="w-full rounded-md border border-gray-300 p-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                Classificação (Problema)
-              </label>
-              <input
-                type="text"
-                value={newClassification}
-                onChange={(e) => setNewClassification(e.target.value)}
-                placeholder="Ex: Buraco na via, Iluminação..."
-                className="w-full rounded-md border border-gray-300 p-2 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                required
-              />
-            </div>
-            <div className="pt-4">
-              <button
-                type="submit"
-                className="w-full rounded-md bg-[#00a2ff] py-2 font-semibold text-white hover:bg-blue-600"
-              >
-                Registrar
-              </button>
-            </div>
-          </form>
-        </Modal>
       </div>
-    </Layout>
+    </div>
   );
 }
